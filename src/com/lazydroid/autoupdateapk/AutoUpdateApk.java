@@ -28,6 +28,9 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.params.BasicHttpParams;
+import org.apache.http.params.HttpConnectionParams;
+import org.apache.http.params.HttpParams;
 import org.apache.http.util.EntityUtils;
 
 import android.app.Notification;
@@ -180,12 +183,23 @@ public class AutoUpdateApk {
 	};
 
 	private class checkUpdateTask extends AsyncTask<Void,Void,String[]> {
-		private HttpClient httpclient = new DefaultHttpClient();
+//		private HttpClient httpclient = new DefaultHttpClient();
 		private HttpPost post = new HttpPost(API_URL);
 
 		protected String[] doInBackground(Void... v) {
 			long start = System.currentTimeMillis();
 
+			HttpParams httpParameters = new BasicHttpParams();
+			// Set the timeout in milliseconds until a connection is established.
+			// The default value is zero, that means the timeout is not used. 
+			int timeoutConnection = 3000;
+			HttpConnectionParams.setConnectionTimeout(httpParameters, timeoutConnection);
+			// Set the default socket timeout (SO_TIMEOUT) 
+			// in milliseconds which is the timeout for waiting for data.
+			int timeoutSocket = 5000;
+			HttpConnectionParams.setSoTimeout(httpParameters, timeoutSocket);
+
+			HttpClient httpclient = new DefaultHttpClient(httpParameters);
 			try {
 				StringEntity params = new StringEntity( "pkgname=" + packageName + "&version=" + versionCode );
 				post.setHeader("Content-Type", "application/x-www-form-urlencoded");
@@ -200,6 +214,7 @@ public class AutoUpdateApk {
 			} catch (IOException e) {
 				e.printStackTrace();
 			} finally {
+				httpclient.getConnectionManager().shutdown();
 				long elapsed = System.currentTimeMillis() - start;
 				Log.v(TAG, "update checked in " + elapsed + "ms");
 			}
@@ -214,8 +229,6 @@ public class AutoUpdateApk {
 
 		protected void onPostExecute(String[] result) {
 			// kill progress bar here
-			httpclient.getConnectionManager().shutdown();
-
 			if( result != null ) {
 				Log.v(TAG, "got reply from update server");
 				String ns = Context.NOTIFICATION_SERVICE;
