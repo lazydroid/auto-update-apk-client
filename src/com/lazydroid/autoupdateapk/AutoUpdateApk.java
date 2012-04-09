@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2012 lenik terenin
+//	Copyright (c) 2012 lenik terenin
 //
 //	Licensed under the Apache License, Version 2.0 (the "License");
 //	you may not use this file except in compliance with the License.
@@ -16,15 +16,13 @@
 package com.lazydroid.autoupdateapk;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Map.Entry;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
 import org.apache.http.ParseException;
 import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
@@ -56,34 +54,23 @@ import android.util.Log;
 import android.widget.Toast;
 
 public class AutoUpdateApk {
-	private final static String TAG = "AutoUpdateApk";
 
-	private final static String API_URL = "http://auto-update-apk.appspot.com/check";
-//	private final static String API_URL = "http://www.auto-update-apk.com/check/weporiwepori/12123";
-
-	private static Context context = null;
-//	private static SharedPreferences preferences;
-
-	private static int versionCode = 0;		// as low as it gets
-	private static String packageName;
-	private static String appName;
-	private static int appIcon = android.R.drawable.ic_popup_reminder;
-
-	public static final long MINUTES = 60 * 1000;
-	public static final long HOURS = 60 * MINUTES;
-	public static final long DAYS = 24 * HOURS;
-
-	private static long UPDATE_INTERVAL = 3 * MINUTES;	//HOURS;	// how often to check
-	private static boolean mobile_updates = false;		// download updates over wifi only
-
-	private static Handler updateHandler = new Handler();
-
-	private static int NOTIFICATION_ID = 0xDEADBEEF;
-
+	// this class is supposed to be instantiated in any of your activities or,
+	// better yet, in Application subclass. Something along the lines of:
+	//
+	//	private AutoUpdateApk aua;	<-- you need to add this line of code
+	//
+	//	public void onCreate(Bundle savedInstanceState) {
+	//		super.onCreate(savedInstanceState);
+	//		setContentView(R.layout.main);
+	//
+	//		aua = new AutoUpdateApk(getApplicationContext());	<-- and add this line too
+	//
 	AutoUpdateApk(Context ctx) {
 		context = ctx;
 		packageName = context.getPackageName();
-		//preferences = context.getSharedPreferences( packageName + "_" + TAG, Context.MODE_PRIVATE);
+		preferences = context.getSharedPreferences( packageName + "_" + TAG, Context.MODE_PRIVATE);
+		last_update = preferences.getLong("last_update", 0);
 		NOTIFICATION_ID += crc32(packageName);
 		
 		ApplicationInfo appinfo = context.getApplicationInfo();
@@ -105,11 +92,13 @@ public class AutoUpdateApk {
 	}
 	
 	// set icon for notification popup (default = application icon)
+	//
 	public static void setIcon( int icon ) {
 		appIcon = icon;
 	}
 
 	// set name to display in notification popup (default = application label)
+	//
 	public static void setName( String name ) {
 		appName = name;
 	}
@@ -121,21 +110,24 @@ public class AutoUpdateApk {
 	//
 	// please, don't specify update interval below 1 hour, this might
 	// be considered annoying behaviour and result in service suspension
+	//
 	public static void setUpdateInterval(long interval) {
 		if( interval > 60 * MINUTES ) {
 			UPDATE_INTERVAL = interval;
 		} else {
-			Log.e(TAG, "update inteval is too short (less than 1 hour)");
+			Log.e(TAG, "update interval is too short (less than 1 hour)");
 		}
 	}
 
-	// software updates will use WiFi/Ethernet only
+	// software updates will use WiFi/Ethernet only (default mode)
+	//
 	public static void disableMobileUpdates() {
 		mobile_updates = false;
 	}
 
 	// software updates will use any internet connection, including mobile
 	// might be a good idea to have 'unlimited' plan on your 3.75G connection
+	//
 	public static void enableMobileUpdates() {
 		mobile_updates = true;
 	}
@@ -143,19 +135,48 @@ public class AutoUpdateApk {
 	// call this if you want to perform update on demand
 	// (checking for updates more often than once an hour is not recommended
 	// and polling server every few minutes might be a reason for suspension)
-	public void checkUpdates() {
-		new checkUpdateTask().execute();
+	//
+	public void checkUpdatesManually() {
+		checkUpdates(true);		// force update check
 	}
 
 //
 // ---------- everything below this line is private and does not belong to the public API ----------
 //
+	private final static String TAG = "AutoUpdateApk";
+
+//	private final static String API_URL = "http://auto-update-apk.appspot.com/check";
+	private final static String API_URL = "http://www.auto-update-apk.com/check";
+
+	private static Context context = null;
+	private static SharedPreferences preferences;
+	private final static String LAST_UPDATE_KEY = "last_update";
+	private static long last_update = 0;
+
+	private static int appIcon = android.R.drawable.ic_popup_reminder;
+	private static int versionCode = 0;		// as low as it gets
+	private static String packageName;
+	private static String appName;
+
+	public static final long MINUTES = 60 * 1000;
+	public static final long HOURS = 60 * MINUTES;
+	public static final long DAYS = 24 * HOURS;
+
+	private static long UPDATE_INTERVAL = 15 * MINUTES;	//HOURS;	// how often to check
+
+	private static boolean mobile_updates = false;		// download updates over wifi only
+
+	private static Handler updateHandler = new Handler();
+
+	private static int NOTIFICATION_ID = 0xDEADBEEF;
+	private static long WAKEUP_INTERVAL = 3 * MINUTES;
+
 	private Runnable periodicUpdate = new Runnable() {
 		@Override
 		public void run() {
-			checkUpdates();
+			checkUpdates(false);
 			updateHandler.removeCallbacks(periodicUpdate);	// remove whatever others may have posted
-			updateHandler.postDelayed(this, UPDATE_INTERVAL);
+			updateHandler.postDelayed(this, WAKEUP_INTERVAL);
 		}
 	};
 
@@ -174,7 +195,7 @@ public class AutoUpdateApk {
 			boolean not_mobile = currentNetworkInfo.getTypeName().equalsIgnoreCase("MOBILE") ? false : true;
 			//Toast.makeText(context, "Network is " + (currentNetworkInfo.isConnected() ? "ON" : "OFF"), Toast.LENGTH_LONG).show();
 			if( currentNetworkInfo.isConnected() && (mobile_updates || not_mobile) ) {
-				checkUpdates();
+				checkUpdates(false);
 				updateHandler.postDelayed(periodicUpdate, UPDATE_INTERVAL);
 			} else {
 				updateHandler.removeCallbacks(periodicUpdate);	// no network anyway
@@ -183,23 +204,24 @@ public class AutoUpdateApk {
 	};
 
 	private class checkUpdateTask extends AsyncTask<Void,Void,String[]> {
-//		private HttpClient httpclient = new DefaultHttpClient();
+		private DefaultHttpClient httpclient = new DefaultHttpClient();
 		private HttpPost post = new HttpPost(API_URL);
 
 		protected String[] doInBackground(Void... v) {
 			long start = System.currentTimeMillis();
 
 			HttpParams httpParameters = new BasicHttpParams();
-			// Set the timeout in milliseconds until a connection is established.
-			// The default value is zero, that means the timeout is not used. 
+			// set the timeout in milliseconds until a connection is established
+			// the default value is zero, that means the timeout is not used 
 			int timeoutConnection = 3000;
 			HttpConnectionParams.setConnectionTimeout(httpParameters, timeoutConnection);
-			// Set the default socket timeout (SO_TIMEOUT) 
-			// in milliseconds which is the timeout for waiting for data.
+			// set the default socket timeout (SO_TIMEOUT) in milliseconds
+			// which is the timeout for waiting for data
 			int timeoutSocket = 5000;
 			HttpConnectionParams.setSoTimeout(httpParameters, timeoutSocket);
 
-			HttpClient httpclient = new DefaultHttpClient(httpParameters);
+			httpclient.setParams(httpParameters);
+
 			try {
 				StringEntity params = new StringEntity( "pkgname=" + packageName + "&version=" + versionCode );
 				post.setHeader("Content-Type", "application/x-www-form-urlencoded");
@@ -258,11 +280,20 @@ public class AutoUpdateApk {
 		}
 	}
 
-	private boolean haveInternetPermissions() {
-		final Map<String,Boolean> required_perms = new HashMap<String,Boolean>();
-		required_perms.put( "android.permission.INTERNET", false );
-		required_perms.put( "android.permission.ACCESS_WIFI_STATE", false );
-		required_perms.put( "android.permission.ACCESS_NETWORK_STATE", false );
+	private void checkUpdates(boolean forced) {
+		long now = System.currentTimeMillis();
+		if( forced || (last_update + UPDATE_INTERVAL) < now ) {
+			new checkUpdateTask().execute();
+			last_update = System.currentTimeMillis();
+			preferences.edit().putLong( LAST_UPDATE_KEY, last_update).commit();
+		}
+	}
+
+	private static boolean haveInternetPermissions() {
+		Set<String> required_perms = new HashSet<String>();
+		required_perms.add("android.permission.INTERNET");
+		required_perms.add("android.permission.ACCESS_WIFI_STATE");
+		required_perms.add("android.permission.ACCESS_NETWORK_STATE");
 
 		PackageManager pm = context.getPackageManager();
 		String packageName = context.getPackageName();
@@ -278,23 +309,21 @@ public class AutoUpdateApk {
 		if( packageInfo.requestedPermissions != null ) {
 			for( String p : packageInfo.requestedPermissions ) {
 				//Log.v(TAG, "permission: " + p.toString());
-				required_perms.put( p, true);
+				required_perms.remove(p);
 			}
-			if( ! required_perms.containsValue(false) ) {
+			if( required_perms.size() == 0 ) {
 				return true;	// permissions are in order
 			}
 			// something is missing
-			for( Entry<String,Boolean> e : required_perms.entrySet() ) {
-				if( !e.getValue() ) {
-					Log.e(TAG, "required permission missing: " + e.getKey());
-				}
+			for( String p : required_perms ) {
+				Log.e(TAG, "required permission missing: " + p);
 			}
 		}
 		Log.e(TAG, "INTERNET/WIFI access required, but no permissions are found in Manifest");
 		return false;
 	}
 
-	int crc32(String str) {
+	private static int crc32(String str) {
         byte bytes[] = str.getBytes();
         Checksum checksum = new CRC32();
         checksum.update(bytes,0,bytes.length);
