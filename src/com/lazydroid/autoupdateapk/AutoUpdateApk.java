@@ -162,14 +162,14 @@ public class AutoUpdateApk {
 	public static final long HOURS = 60 * MINUTES;
 	public static final long DAYS = 24 * HOURS;
 
-	private static long UPDATE_INTERVAL = 15 * MINUTES;	//HOURS;	// how often to check
+	private static long UPDATE_INTERVAL = 3 * HOURS;	// how often to check
 
 	private static boolean mobile_updates = false;		// download updates over wifi only
 
 	private static Handler updateHandler = new Handler();
 
 	private static int NOTIFICATION_ID = 0xDEADBEEF;
-	private static long WAKEUP_INTERVAL = 3 * MINUTES;
+	private static long WAKEUP_INTERVAL = 15 * MINUTES;
 
 	private Runnable periodicUpdate = new Runnable() {
 		@Override
@@ -183,12 +183,7 @@ public class AutoUpdateApk {
 	private BroadcastReceiver connectivity_receiver = new BroadcastReceiver() {
 		@Override
 		public void onReceive(Context context, Intent intent) {
-//			boolean noConnectivity = intent.getBooleanExtra(ConnectivityManager.EXTRA_NO_CONNECTIVITY, false);
-//			String reason = intent.getStringExtra(ConnectivityManager.EXTRA_REASON);
-//			boolean isFailover = intent.getBooleanExtra(ConnectivityManager.EXTRA_IS_FAILOVER, false);
-            
 			NetworkInfo currentNetworkInfo = (NetworkInfo) intent.getParcelableExtra(ConnectivityManager.EXTRA_NETWORK_INFO);
-//			NetworkInfo otherNetworkInfo = (NetworkInfo) intent.getParcelableExtra(ConnectivityManager.EXTRA_OTHER_NETWORK_INFO);
 
 			// do application-specific task(s) based on the current network state, such 
 			// as enabling queuing of HTTP requests when currentNetworkInfo is connected etc.
@@ -227,7 +222,7 @@ public class AutoUpdateApk {
 				post.setHeader("Content-Type", "application/x-www-form-urlencoded");
 				post.setEntity(params);
 				String response = EntityUtils.toString( httpclient.execute( post ).getEntity(), "UTF-8" );
-				Log.i(TAG, "response: " + response);
+				//Log.i(TAG, "response: " + response);
 				return response.split("\n");
 			} catch (ParseException e) {
 				e.printStackTrace();
@@ -256,7 +251,7 @@ public class AutoUpdateApk {
 				String ns = Context.NOTIFICATION_SERVICE;
 				NotificationManager nm = (NotificationManager) context.getSystemService(ns);
 				if( result[0].equalsIgnoreCase("have update") ) {
-					// raise popup
+					// raise notification
 					Notification notification = new Notification(
 							appIcon, appName + " update", System.currentTimeMillis());
 					notification.flags |= Notification.FLAG_AUTO_CANCEL | Notification.FLAG_NO_CLEAR;
@@ -319,7 +314,7 @@ public class AutoUpdateApk {
 				Log.e(TAG, "required permission missing: " + p);
 			}
 		}
-		Log.e(TAG, "INTERNET/WIFI access required, but no permissions are found in Manifest");
+		Log.e(TAG, "INTERNET/WIFI access required, but no permissions are found in Manifest.xml");
 		return false;
 	}
 
