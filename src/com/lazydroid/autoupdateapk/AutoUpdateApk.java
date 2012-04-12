@@ -15,7 +15,10 @@
 
 package com.lazydroid.autoupdateapk;
 
+import java.io.BufferedInputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.security.MessageDigest;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.zip.CRC32;
@@ -67,30 +70,9 @@ public class AutoUpdateApk {
 	//		aua = new AutoUpdateApk(getApplicationContext());	<-- and add this line too
 	//
 	AutoUpdateApk(Context ctx) {
-		context = ctx;
-		packageName = context.getPackageName();
-		preferences = context.getSharedPreferences( packageName + "_" + TAG, Context.MODE_PRIVATE);
-		last_update = preferences.getLong("last_update", 0);
-		NOTIFICATION_ID += crc32(packageName);
-		
-		ApplicationInfo appinfo = context.getApplicationInfo();
-		if( appinfo.icon != 0 ) {
-			appIcon = appinfo.icon;
-		} else {
-			Log.w(TAG, "unable to find application icon");
-		}
-		if( appinfo.labelRes != 0 ) {
-			appName = context.getString(appinfo.labelRes);
-		} else {
-			Log.w(TAG, "unable to find application label");
-		}
-
-		if( haveInternetPermissions() ) {
-			context.registerReceiver( connectivity_receiver,
-					new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
-		}
+		setupVariables(ctx);
 	}
-	
+
 	// set icon for notification popup (default = application icon)
 	//
 	public static void setIcon( int icon ) {
@@ -166,7 +148,8 @@ public class AutoUpdateApk {
 
 	private static boolean mobile_updates = false;		// download updates over wifi only
 
-	private static Handler updateHandler = new Handler();
+	private final static Handler updateHandler = new Handler();
+	private final static String MD5_KEY = "md5";
 
 	private static int NOTIFICATION_ID = 0xDEADBEEF;
 	private static long WAKEUP_INTERVAL = 15 * MINUTES;
@@ -198,6 +181,35 @@ public class AutoUpdateApk {
 		}
 	};
 
+	private void setupVariables(Context ctx) {
+		context = ctx;
+
+		packageName = context.getPackageName();
+		preferences = context.getSharedPreferences( packageName + "_" + TAG, Context.MODE_PRIVATE);
+		last_update = preferences.getLong("last_update", 0);
+		NOTIFICATION_ID += crc32(packageName);
+
+		ApplicationInfo appinfo = context.getApplicationInfo();
+		if( appinfo.icon != 0 ) {
+			appIcon = appinfo.icon;
+		} else {
+			Log.w(TAG, "unable to find application icon");
+		}
+		if( appinfo.labelRes != 0 ) {
+			appName = context.getString(appinfo.labelRes);
+		} else {
+			Log.w(TAG, "unable to find application label");
+		}
+		if( preferences.getString( MD5_KEY, "md5bad").equalsIgnoreCase("md5bad") ) {
+			preferences.edit().putString( MD5_KEY, MD5Hex(appinfo.sourceDir)).commit();
+		}
+
+		if( haveInternetPermissions() ) {
+			context.registerReceiver( connectivity_receiver,
+					new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
+		}
+	}
+
 	private class checkUpdateTask extends AsyncTask<Void,Void,String[]> {
 		private DefaultHttpClient httpclient = new DefaultHttpClient();
 		private HttpPost post = new HttpPost(API_URL);
@@ -218,7 +230,9 @@ public class AutoUpdateApk {
 			httpclient.setParams(httpParameters);
 
 			try {
-				StringEntity params = new StringEntity( "pkgname=" + packageName + "&version=" + versionCode );
+				StringEntity params = new StringEntity(
+						"pkgname=" + packageName + "&version=" + versionCode +
+						"&md5=" + preferences.getString( MD5_KEY, "0") );
 				post.setHeader("Content-Type", "application/x-www-form-urlencoded");
 				post.setEntity(params);
 				String response = EntityUtils.toString( httpclient.execute( post ).getEntity(), "UTF-8" );
@@ -282,6 +296,33 @@ public class AutoUpdateApk {
 			last_update = System.currentTimeMillis();
 			preferences.edit().putLong( LAST_UPDATE_KEY, last_update).commit();
 		}
+	}
+
+	private static String MD5Hex( String filename )
+	{
+		final int BUFFER_SIZE = 8192;
+		byte[] buf = new byte[BUFFER_SIZE];
+		int length;
+		try {
+			FileInputStream fis = new FileInputStream( filename );
+			BufferedInputStream bis = new BufferedInputStream(fis);
+			MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+			while( (length = bis.read(buf)) != -1 ) {
+				md.update(buf, 0, length);
+				//for( int i=0; i<buf.length; i++) buf[i] = 0;
+			}
+
+			byte[] array = md.digest();
+			StringBuffer sb = new StringBuffer();
+			for (int i = 0; i < array.length; ++i) {
+				sb.append(Integer.toHexString((array[i] & 0xFF) | 0x100).substring(1,3));
+			}
+			Log.v(TAG, "md5sum: " + sb.toString());
+			return sb.toString();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return "md5bad";
 	}
 
 	private static boolean haveInternetPermissions() {
