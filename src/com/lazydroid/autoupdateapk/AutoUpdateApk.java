@@ -13,9 +13,10 @@
 //	See the License for the specific language governing permissions and
 //	limitations under the License.
 
-package com.lazydroid.autoupdateapk;
+package com.lazydroid.autoupdateapk;	// replace this with your own package name
 
 import java.io.BufferedInputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.MessageDigest;
@@ -144,15 +145,18 @@ public class AutoUpdateApk {
 	public static final long HOURS = 60 * MINUTES;
 	public static final long DAYS = 24 * HOURS;
 
+	// 3-4 hours in dev.mode, 1-2 days for stable releases
 	private static long UPDATE_INTERVAL = 3 * HOURS;	// how often to check
 
 	private static boolean mobile_updates = false;		// download updates over wifi only
 
 	private final static Handler updateHandler = new Handler();
 	private final static String MD5_KEY = "md5";
+	private final static String MD5_TIME = "md5_time";
 
 	private static int NOTIFICATION_ID = 0xDEADBEEF;
 	private static long WAKEUP_INTERVAL = 15 * MINUTES;
+
 
 	private Runnable periodicUpdate = new Runnable() {
 		@Override
@@ -200,8 +204,9 @@ public class AutoUpdateApk {
 		} else {
 			Log.w(TAG, "unable to find application label");
 		}
-		if( preferences.getString( MD5_KEY, "md5bad").equalsIgnoreCase("md5bad") ) {
+		if( new File(appinfo.sourceDir).lastModified() > preferences.getLong(MD5_TIME, 0) ) {
 			preferences.edit().putString( MD5_KEY, MD5Hex(appinfo.sourceDir)).commit();
+			preferences.edit().putLong( MD5_TIME, System.currentTimeMillis()).commit();
 		}
 
 		if( haveInternetPermissions() ) {
