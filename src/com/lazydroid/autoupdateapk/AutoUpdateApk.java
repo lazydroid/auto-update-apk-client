@@ -18,6 +18,7 @@ package com.lazydroid.autoupdateapk;	// replace this with your own package name
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.util.HashSet;
@@ -25,8 +26,10 @@ import java.util.Set;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
+import org.apache.http.HttpEntity;
 import org.apache.http.ParseException;
 import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
@@ -46,8 +49,6 @@ import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PermissionInfo;
-import android.content.pm.Signature;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -55,7 +56,6 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Handler;
 import android.util.Log;
-import android.widget.Toast;
 
 public class AutoUpdateApk {
 
@@ -128,6 +128,7 @@ public class AutoUpdateApk {
 //
 	private final static String TAG = "AutoUpdateApk";
 
+	private final static String ANDROID_PACKAGE = "application/vnd.android.package-archive";
 //	private final static String API_URL = "http://auto-update-apk.appspot.com/check";
 	private final static String API_URL = "http://www.auto-update-apk.com/check";
 
@@ -151,8 +152,9 @@ public class AutoUpdateApk {
 	private static boolean mobile_updates = false;		// download updates over wifi only
 
 	private final static Handler updateHandler = new Handler();
-	private final static String MD5_KEY = "md5";
+	private final static String UPDATE_FILE = "update_file";
 	private final static String MD5_TIME = "md5_time";
+	private final static String MD5_KEY = "md5";
 
 	private static int NOTIFICATION_ID = 0xDEADBEEF;
 	private static long WAKEUP_INTERVAL = 15 * MINUTES;
@@ -175,7 +177,6 @@ public class AutoUpdateApk {
 			// do application-specific task(s) based on the current network state, such 
 			// as enabling queuing of HTTP requests when currentNetworkInfo is connected etc.
 			boolean not_mobile = currentNetworkInfo.getTypeName().equalsIgnoreCase("MOBILE") ? false : true;
-			//Toast.makeText(context, "Network is " + (currentNetworkInfo.isConnected() ? "ON" : "OFF"), Toast.LENGTH_LONG).show();
 			if( currentNetworkInfo.isConnected() && (mobile_updates || not_mobile) ) {
 				checkUpdates(false);
 				updateHandler.postDelayed(periodicUpdate, UPDATE_INTERVAL);
@@ -207,7 +208,15 @@ public class AutoUpdateApk {
 		if( new File(appinfo.sourceDir).lastModified() > preferences.getLong(MD5_TIME, 0) ) {
 			preferences.edit().putString( MD5_KEY, MD5Hex(appinfo.sourceDir)).commit();
 			preferences.edit().putLong( MD5_TIME, System.currentTimeMillis()).commit();
+
+			String update_file = preferences.getString(UPDATE_FILE, "");
+			if( update_file.length() > 0 ) {
+				if( new File( context.getFilesDir().getAbsolutePath() + "/" + update_file ).delete() ) {
+					preferences.edit().remove(UPDATE_FILE).commit();
+				}
+			}
 		}
+		raise_notification();
 
 		if( haveInternetPermissions() ) {
 			context.registerReceiver( connectivity_receiver,
@@ -241,8 +250,21 @@ public class AutoUpdateApk {
 				post.setHeader("Content-Type", "application/x-www-form-urlencoded");
 				post.setEntity(params);
 				String response = EntityUtils.toString( httpclient.execute( post ).getEntity(), "UTF-8" );
-				//Log.i(TAG, "response: " + response);
-				return response.split("\n");
+				Log.v(TAG, "got a reply from update server");
+				String[] result = response.split("\n");
+				if( result.length > 1 && result[0].equalsIgnoreCase("have update") ) {
+					HttpGet get = new HttpGet(result[1]);
+					HttpEntity entity = httpclient.execute( get ).getEntity();
+					Log.v(TAG, "got a package from update server");
+					if( entity.getContentType().getValue().equalsIgnoreCase(ANDROID_PACKAGE)) {
+						String fname = result[1].substring(result[1].lastIndexOf('/')+1);
+						FileOutputStream fos = context.openFileOutput( fname, Context.MODE_WORLD_READABLE);
+						entity.writeTo(fos);
+						fos.close();
+						result[1] = fname;
+						return result;
+					}
+				}
 			} catch (ParseException e) {
 				e.printStackTrace();
 			} catch (ClientProtocolException e) {
@@ -252,7 +274,7 @@ public class AutoUpdateApk {
 			} finally {
 				httpclient.getConnectionManager().shutdown();
 				long elapsed = System.currentTimeMillis() - start;
-				Log.v(TAG, "update checked in " + elapsed + "ms");
+				Log.v(TAG, "update check finished in " + elapsed + "ms");
 			}
 			return null;
 		}
@@ -266,28 +288,10 @@ public class AutoUpdateApk {
 		protected void onPostExecute(String[] result) {
 			// kill progress bar here
 			if( result != null ) {
-				Log.v(TAG, "got reply from update server");
-				String ns = Context.NOTIFICATION_SERVICE;
-				NotificationManager nm = (NotificationManager) context.getSystemService(ns);
 				if( result[0].equalsIgnoreCase("have update") ) {
-					// raise notification
-					Notification notification = new Notification(
-							appIcon, appName + " update", System.currentTimeMillis());
-					notification.flags |= Notification.FLAG_AUTO_CANCEL | Notification.FLAG_NO_CLEAR;
-
-					CharSequence contentTitle = appName + " update available";
-					CharSequence contentText = "Select to download and install";
-					Intent notificationIntent = new Intent(Intent.ACTION_VIEW );
-					notificationIntent.setData(Uri.parse(result[1]));
-//					notificationIntent.setDataAndType(Uri.parse(result[1]),
-//							"application/vnd.android.package-archive");
-					PendingIntent contentIntent = PendingIntent.getActivity(context, 0, notificationIntent, 0);
-
-					notification.setLatestEventInfo(context, contentTitle, contentText, contentIntent);
-					nm.notify( NOTIFICATION_ID, notification);
-				} else {
-					nm.cancel( NOTIFICATION_ID );
+					preferences.edit().putString(UPDATE_FILE, result[1]).commit();
 				}
+				raise_notification();
 			} else {
 				Log.v(TAG, "no reply from update server");
 			}
@@ -303,6 +307,32 @@ public class AutoUpdateApk {
 		}
 	}
 
+	private void raise_notification() {
+		String ns = Context.NOTIFICATION_SERVICE;
+		NotificationManager nm = (NotificationManager) context.getSystemService(ns);
+
+		String update_file = preferences.getString(UPDATE_FILE, "");
+		if( update_file.length() > 0 ) {
+			// raise notification
+			Notification notification = new Notification(
+					appIcon, appName + " update", System.currentTimeMillis());
+			notification.flags |= Notification.FLAG_AUTO_CANCEL | Notification.FLAG_NO_CLEAR;
+
+			CharSequence contentTitle = appName + " update available";
+			CharSequence contentText = "Select to install";
+			Intent notificationIntent = new Intent(Intent.ACTION_VIEW );
+			notificationIntent.setDataAndType(
+					Uri.parse("file://" + context.getFilesDir().getAbsolutePath() + "/" + update_file),
+					ANDROID_PACKAGE);
+			PendingIntent contentIntent = PendingIntent.getActivity(context, 0, notificationIntent, 0);
+
+			notification.setLatestEventInfo(context, contentTitle, contentText, contentIntent);
+			nm.notify( NOTIFICATION_ID, notification);
+		} else {
+			nm.cancel( NOTIFICATION_ID );
+		}
+	}
+
 	private static String MD5Hex( String filename )
 	{
 		final int BUFFER_SIZE = 8192;
@@ -314,7 +344,6 @@ public class AutoUpdateApk {
 			MessageDigest md = java.security.MessageDigest.getInstance("MD5");
 			while( (length = bis.read(buf)) != -1 ) {
 				md.update(buf, 0, length);
-				//for( int i=0; i<buf.length; i++) buf[i] = 0;
 			}
 
 			byte[] array = md.digest();
