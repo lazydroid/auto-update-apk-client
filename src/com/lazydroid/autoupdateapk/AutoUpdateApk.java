@@ -126,14 +126,14 @@ public class AutoUpdateApk {
 //
 // ---------- everything below this line is private and does not belong to the public API ----------
 //
-	private final static String TAG = "AutoUpdateApk";
+	protected final static String TAG = "AutoUpdateApk";
 
 	private final static String ANDROID_PACKAGE = "application/vnd.android.package-archive";
 //	private final static String API_URL = "http://auto-update-apk.appspot.com/check";
 	private final static String API_URL = "http://www.auto-update-apk.com/check";
 
-	private static Context context = null;
-	private static SharedPreferences preferences;
+	protected static Context context = null;
+	protected static SharedPreferences preferences;
 	private final static String LAST_UPDATE_KEY = "last_update";
 	private static long last_update = 0;
 
@@ -152,7 +152,7 @@ public class AutoUpdateApk {
 	private static boolean mobile_updates = false;		// download updates over wifi only
 
 	private final static Handler updateHandler = new Handler();
-	private final static String UPDATE_FILE = "update_file";
+	protected final static String UPDATE_FILE = "update_file";
 	private final static String MD5_TIME = "md5_time";
 	private final static String MD5_KEY = "md5";
 
@@ -307,7 +307,7 @@ public class AutoUpdateApk {
 		}
 	}
 
-	private void raise_notification() {
+	protected void raise_notification() {
 		String ns = Context.NOTIFICATION_SERVICE;
 		NotificationManager nm = (NotificationManager) context.getSystemService(ns);
 
