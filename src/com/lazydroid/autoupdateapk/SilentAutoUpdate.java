@@ -1,7 +1,23 @@
+//
+//	Copyright (c) 2012 lenik terenin
+//
+//	Licensed under the Apache License, Version 2.0 (the "License");
+//	you may not use this file except in compliance with the License.
+//	You may obtain a copy of the License at
+//
+//		http://www.apache.org/licenses/LICENSE-2.0
+//
+//	Unless required by applicable law or agreed to in writing, software
+//	distributed under the License is distributed on an "AS IS" BASIS,
+//	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//	See the License for the specific language governing permissions and
+//	limitations under the License.
+
 package com.lazydroid.autoupdateapk;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 
 import android.content.Context;
 import android.content.pm.ActivityInfo;
@@ -9,6 +25,14 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.util.Log;
+
+// ***************************
+// *** WARNING *** WARNING ***
+// ***************************
+//
+// this class is very experimental and intended for people who well understand
+// what is going on and what kind of unexpected results or strange behavior may
+// occur in some cases. please use AutoUpdateApk instead of this class if in doubt
 
 public class SilentAutoUpdate extends AutoUpdateApk {
 
@@ -33,17 +57,16 @@ public class SilentAutoUpdate extends AutoUpdateApk {
 	//
 	protected void raise_notification() {
 		String update_file = preferences.getString(UPDATE_FILE, "");
-		if( update_file.length() > 0 ) {
+		boolean silent_update_failed = preferences.getBoolean(SILENT_FAILED, false);
+		if( update_file.length() > 0 && !silent_update_failed ) {
 			String[] commands = {
 					"pm install -r " + context.getFilesDir().getAbsolutePath() + "/" + update_file,
-					"am start -S -n " + context.getPackageName() + "/" + get_main_activity()
+					"am start -n " + context.getPackageName() + "/" + get_main_activity()
 			};
-			if( execute_as_root(commands) ) {
-				Log.v(TAG, "silently updated: " + update_file);
-			} else {
-				super.raise_notification();
-			}
+			execute_as_root(commands);	// not supposed to return if successful
+			preferences.edit().putBoolean(SILENT_FAILED, true).commit();	// avoid silent update loop
 		}
+		super.raise_notification();
 	}
 
 	// this is not guaranteed to work 100%, should be rewritten.
@@ -72,42 +95,33 @@ public class SilentAutoUpdate extends AutoUpdateApk {
 		return "";
 	}
 
-	private boolean execute_as_root( String[] commands ) {
-		Process p = null;
+	private void execute_as_root( String[] commands ) {
 		try {
-			// Get root privileges
-			p = Runtime.getRuntime().exec("su");
-
 			// Do the magic
+			Process p = Runtime.getRuntime().exec( "su" );
+			InputStream es = p.getErrorStream();
 			DataOutputStream os = new DataOutputStream(p.getOutputStream());
+
 			for( String command : commands ) {
 				Log.i(TAG,command);
 				os.writeBytes(command + "\n");
 			}
-
-			// Close the terminal
 			os.writeBytes("exit\n");
 			os.flush();
-			try {
-				p.waitFor();
-				if( p.exitValue() == 255 ) {
-					Log.e(TAG, "command failed");
-					return false;	// failure
-				} else {
-					Log.e(TAG, "command succeeded");
-					return true;	// success
-				}
-			} catch (InterruptedException e) {
-				Log.e(TAG, "su interrupted");
-				e.printStackTrace();
-				return false;
+
+			int read;
+			byte[] buffer = new byte[4096];
+			String output = new String();
+			while ((read = es.read(buffer)) > 0) {
+			    output += new String(buffer, 0, read);
 			}
+
+			p.waitFor();
+			Log.e(TAG, output.trim() + " (" + p.exitValue() + ")");
 		} catch (IOException e) {
-			Log.e(TAG, "su IO error");
-			e.printStackTrace();
-			return false;
-		} finally {
-            if( p != null) p.destroy();
-        }
+			Log.e(TAG, e.getMessage());
+		} catch (InterruptedException e) {
+			Log.e(TAG, e.getMessage());
+		}
 	}
 }

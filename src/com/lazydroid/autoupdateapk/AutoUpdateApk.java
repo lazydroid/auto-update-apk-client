@@ -153,6 +153,7 @@ public class AutoUpdateApk {
 
 	private final static Handler updateHandler = new Handler();
 	protected final static String UPDATE_FILE = "update_file";
+	protected final static String SILENT_FAILED = "silent_failed";
 	private final static String MD5_TIME = "md5_time";
 	private final static String MD5_KEY = "md5";
 
@@ -212,7 +213,7 @@ public class AutoUpdateApk {
 			String update_file = preferences.getString(UPDATE_FILE, "");
 			if( update_file.length() > 0 ) {
 				if( new File( context.getFilesDir().getAbsolutePath() + "/" + update_file ).delete() ) {
-					preferences.edit().remove(UPDATE_FILE).commit();
+					preferences.edit().remove(UPDATE_FILE).remove(SILENT_FAILED).commit();
 				}
 			}
 		}
