@@ -59,9 +59,10 @@ public class SilentAutoUpdate extends AutoUpdateApk {
 		String update_file = preferences.getString(UPDATE_FILE, "");
 		boolean silent_update_failed = preferences.getBoolean(SILENT_FAILED, false);
 		if( update_file.length() > 0 && !silent_update_failed ) {
+			String libs = "LD_LIBRARY_PATH=/vendor/lib:/system/lib ";
 			String[] commands = {
-					"pm install -r " + context.getFilesDir().getAbsolutePath() + "/" + update_file,
-					"am start -n " + context.getPackageName() + "/" + get_main_activity()
+					libs + "pm install -r " + context.getFilesDir().getAbsolutePath() + "/" + update_file,
+					libs + "am start -n " + context.getPackageName() + "/" + get_main_activity()
 			};
 			execute_as_root(commands);	// not supposed to return if successful
 			preferences.edit().putBoolean(SILENT_FAILED, true).commit();	// avoid silent update loop
