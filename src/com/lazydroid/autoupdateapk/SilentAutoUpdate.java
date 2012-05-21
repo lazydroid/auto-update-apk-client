@@ -104,7 +104,7 @@ public class SilentAutoUpdate extends AutoUpdateApk {
 			DataOutputStream os = new DataOutputStream(p.getOutputStream());
 
 			for( String command : commands ) {
-				Log.i(TAG,command);
+				//Log.i(TAG,command);
 				os.writeBytes(command + "\n");
 			}
 			os.writeBytes("exit\n");

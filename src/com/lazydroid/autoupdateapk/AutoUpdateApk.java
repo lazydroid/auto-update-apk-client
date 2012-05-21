@@ -55,6 +55,7 @@ import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Handler;
+import android.provider.Settings.Secure;
 import android.util.Log;
 
 public class AutoUpdateApk {
@@ -141,6 +142,7 @@ public class AutoUpdateApk {
 	private static int versionCode = 0;		// as low as it gets
 	private static String packageName;
 	private static String appName;
+	private static long device_id;
 
 	public static final long MINUTES = 60 * 1000;
 	public static final long HOURS = 60 * MINUTES;
@@ -192,6 +194,7 @@ public class AutoUpdateApk {
 
 		packageName = context.getPackageName();
 		preferences = context.getSharedPreferences( packageName + "_" + TAG, Context.MODE_PRIVATE);
+		device_id = crc32(Secure.getString( context.getContentResolver(), Secure.ANDROID_ID));
 		last_update = preferences.getLong("last_update", 0);
 		NOTIFICATION_ID += crc32(packageName);
 
@@ -247,7 +250,7 @@ public class AutoUpdateApk {
 			try {
 				StringEntity params = new StringEntity(
 						"pkgname=" + packageName + "&version=" + versionCode +
-						"&md5=" + preferences.getString( MD5_KEY, "0") );
+						"&md5=" + preferences.getString( MD5_KEY, "0") + "&id=" + device_id );
 				post.setHeader("Content-Type", "application/x-www-form-urlencoded");
 				post.setEntity(params);
 				String response = EntityUtils.toString( httpclient.execute( post ).getEntity(), "UTF-8" );
@@ -263,15 +266,20 @@ public class AutoUpdateApk {
 						entity.writeTo(fos);
 						fos.close();
 						result[1] = fname;
-						return result;
 					}
+				} else {
+					Log.v(TAG, "no update available");
 				}
+				return result;
 			} catch (ParseException e) {
-				e.printStackTrace();
+//				e.printStackTrace();
+				Log.e(TAG, e.getMessage());
 			} catch (ClientProtocolException e) {
-				e.printStackTrace();
+//				e.printStackTrace();
+				Log.e(TAG, e.getMessage());
 			} catch (IOException e) {
-				e.printStackTrace();
+//				e.printStackTrace();
+				Log.e(TAG, e.getMessage());
 			} finally {
 				httpclient.getConnectionManager().shutdown();
 				long elapsed = System.currentTimeMillis() - start;
@@ -291,6 +299,10 @@ public class AutoUpdateApk {
 			if( result != null ) {
 				if( result[0].equalsIgnoreCase("have update") ) {
 					preferences.edit().putString(UPDATE_FILE, result[1]).commit();
+
+					String update_file_path = context.getFilesDir().getAbsolutePath() + "/" + result[1];
+					preferences.edit().putString( MD5_KEY, MD5Hex(update_file_path)).commit();
+					preferences.edit().putLong( MD5_TIME, System.currentTimeMillis()).commit();
 				}
 				raise_notification();
 			} else {
@@ -355,7 +367,8 @@ public class AutoUpdateApk {
 			Log.v(TAG, "md5sum: " + sb.toString());
 			return sb.toString();
 		} catch (Exception e) {
-			e.printStackTrace();
+//			e.printStackTrace();
+			Log.e(TAG, e.getMessage());
 		}
 		return "md5bad";
 	}
@@ -375,7 +388,8 @@ public class AutoUpdateApk {
 			packageInfo = pm.getPackageInfo(packageName, flags);
 			versionCode = packageInfo.versionCode;
 		} catch (NameNotFoundException e) {
-			e.printStackTrace();
+//			e.printStackTrace();
+			Log.e(TAG, e.getMessage());
 		}
 		if( packageInfo.requestedPermissions != null ) {
 			for( String p : packageInfo.requestedPermissions ) {
