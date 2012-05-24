@@ -56,7 +56,6 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Handler;
 import android.provider.Settings.Secure;
-import android.util.Log;
 
 public class AutoUpdateApk {
 
@@ -409,9 +408,44 @@ public class AutoUpdateApk {
 	}
 
 	private static int crc32(String str) {
-        byte bytes[] = str.getBytes();
-        Checksum checksum = new CRC32();
-        checksum.update(bytes,0,bytes.length);
-        return (int) checksum.getValue();
+		byte bytes[] = str.getBytes();
+		Checksum checksum = new CRC32();
+		checksum.update(bytes,0,bytes.length);
+		return (int) checksum.getValue();
 	}
+
+	// logging facilities to enable easy overriding. thanks, Dan!
+	//
+	static class Log {
+		protected static void v(String tag, String message) {v(tag, message, null);}
+		protected static void v(String tag, String message, Throwable e) {log("v", tag, message, e);}
+		protected static void d(String tag, String message) {d(tag, message, null);}
+		protected static void d(String tag, String message, Throwable e) {log("d", tag, message, e);}
+		protected static void i(String tag, String message) {d(tag, message, null);}
+		protected static void i(String tag, String message, Throwable e) {log("i", tag, message, e);}
+		protected static void w(String tag, String message) {w(tag, message, null);}
+		protected static void w(String tag, String message, Throwable e) {log("w", tag, message, e);}
+		protected static void e(String tag, String message) {e(tag, message, null);}
+		protected static void e(String tag, String message, Throwable e) {log("e", tag, message, e);}
+	}
+
+	protected static void log(String level, String tag, String message, Throwable e) {
+		if(level.equalsIgnoreCase("v")) {
+			if(e == null) android.util.Log.v(tag, message);
+			else android.util.Log.v(tag, message, e);
+		} else if(level.equalsIgnoreCase("d")) {
+			if(e == null) android.util.Log.d(tag, message);
+			else android.util.Log.d(tag, message, e);
+		} else if(level.equalsIgnoreCase("i")) {
+			if(e == null) android.util.Log.i(tag, message);
+			else android.util.Log.i(tag, message, e);
+		} else if(level.equalsIgnoreCase("w")) {
+			if(e == null) android.util.Log.w(tag, message);
+			else android.util.Log.w(tag, message, e);
+		} else {
+			if(e == null) android.util.Log.e(tag, message);
+			else android.util.Log.e(tag, message, e);
+		}
+	}
+
 }
