@@ -13,7 +13,7 @@
 //	See the License for the specific language governing permissions and
 //	limitations under the License.
 
-package com.lazydroid.autoupdateapk;	// replace this with your own package name
+package com.lazydroid.autoupdateapk;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -94,11 +94,11 @@ public class AutoUpdateApk {
 	// please, don't specify update interval below 1 hour, this might
 	// be considered annoying behaviour and result in service suspension
 	//
-	public static void setUpdateInterval(long interval) {
+	public void setUpdateInterval(long interval) {
 		if( interval > 60 * MINUTES ) {
 			UPDATE_INTERVAL = interval;
 		} else {
-			Log.e(TAG, "update interval is too short (less than 1 hour)");
+			Log_e(TAG, "update interval is too short (less than 1 hour)");
 		}
 	}
 
@@ -201,12 +201,12 @@ public class AutoUpdateApk {
 		if( appinfo.icon != 0 ) {
 			appIcon = appinfo.icon;
 		} else {
-			Log.w(TAG, "unable to find application icon");
+			Log_w(TAG, "unable to find application icon");
 		}
 		if( appinfo.labelRes != 0 ) {
 			appName = context.getString(appinfo.labelRes);
 		} else {
-			Log.w(TAG, "unable to find application label");
+			Log_w(TAG, "unable to find application label");
 		}
 		if( new File(appinfo.sourceDir).lastModified() > preferences.getLong(MD5_TIME, 0) ) {
 			preferences.edit().putString( MD5_KEY, MD5Hex(appinfo.sourceDir)).commit();
@@ -253,12 +253,12 @@ public class AutoUpdateApk {
 				post.setHeader("Content-Type", "application/x-www-form-urlencoded");
 				post.setEntity(params);
 				String response = EntityUtils.toString( httpclient.execute( post ).getEntity(), "UTF-8" );
-				Log.v(TAG, "got a reply from update server");
+				Log_v(TAG, "got a reply from update server");
 				String[] result = response.split("\n");
 				if( result.length > 1 && result[0].equalsIgnoreCase("have update") ) {
 					HttpGet get = new HttpGet(result[1]);
 					HttpEntity entity = httpclient.execute( get ).getEntity();
-					Log.v(TAG, "got a package from update server");
+					Log_v(TAG, "got a package from update server");
 					if( entity.getContentType().getValue().equalsIgnoreCase(ANDROID_PACKAGE)) {
 						String fname = result[1].substring(result[1].lastIndexOf('/')+1);
 						FileOutputStream fos = context.openFileOutput( fname, Context.MODE_WORLD_READABLE);
@@ -267,22 +267,22 @@ public class AutoUpdateApk {
 						result[1] = fname;
 					}
 				} else {
-					Log.v(TAG, "no update available");
+					Log_v(TAG, "no update available");
 				}
 				return result;
 			} catch (ParseException e) {
 //				e.printStackTrace();
-				Log.e(TAG, e.getMessage());
+				Log_e(TAG, e.getMessage());
 			} catch (ClientProtocolException e) {
 //				e.printStackTrace();
-				Log.e(TAG, e.getMessage());
+				Log_e(TAG, e.getMessage());
 			} catch (IOException e) {
 //				e.printStackTrace();
-				Log.e(TAG, e.getMessage());
+				Log_e(TAG, e.getMessage());
 			} finally {
 				httpclient.getConnectionManager().shutdown();
 				long elapsed = System.currentTimeMillis() - start;
-				Log.v(TAG, "update check finished in " + elapsed + "ms");
+				Log_v(TAG, "update check finished in " + elapsed + "ms");
 			}
 			return null;
 		}
@@ -290,7 +290,7 @@ public class AutoUpdateApk {
 		protected void onPreExecute()
 		{
 			// show progress bar or something
-			Log.v(TAG, "checking if there's update on the server");
+			Log_v(TAG, "checking if there's update on the server");
 		}
 
 		protected void onPostExecute(String[] result) {
@@ -305,7 +305,7 @@ public class AutoUpdateApk {
 				}
 				raise_notification();
 			} else {
-				Log.v(TAG, "no reply from update server");
+				Log_v(TAG, "no reply from update server");
 			}
 		}
 	}
@@ -345,7 +345,7 @@ public class AutoUpdateApk {
 		}
 	}
 
-	private static String MD5Hex( String filename )
+	private String MD5Hex( String filename )
 	{
 		final int BUFFER_SIZE = 8192;
 		byte[] buf = new byte[BUFFER_SIZE];
@@ -363,16 +363,16 @@ public class AutoUpdateApk {
 			for (int i = 0; i < array.length; ++i) {
 				sb.append(Integer.toHexString((array[i] & 0xFF) | 0x100).substring(1,3));
 			}
-			Log.v(TAG, "md5sum: " + sb.toString());
+			Log_v(TAG, "md5sum: " + sb.toString());
 			return sb.toString();
 		} catch (Exception e) {
 //			e.printStackTrace();
-			Log.e(TAG, e.getMessage());
+			Log_e(TAG, e.getMessage());
 		}
 		return "md5bad";
 	}
 
-	private static boolean haveInternetPermissions() {
+	private boolean haveInternetPermissions() {
 		Set<String> required_perms = new HashSet<String>();
 		required_perms.add("android.permission.INTERNET");
 		required_perms.add("android.permission.ACCESS_WIFI_STATE");
@@ -388,11 +388,11 @@ public class AutoUpdateApk {
 			versionCode = packageInfo.versionCode;
 		} catch (NameNotFoundException e) {
 //			e.printStackTrace();
-			Log.e(TAG, e.getMessage());
+			Log_e(TAG, e.getMessage());
 		}
 		if( packageInfo.requestedPermissions != null ) {
 			for( String p : packageInfo.requestedPermissions ) {
-				//Log.v(TAG, "permission: " + p.toString());
+				//Log_v(TAG, "permission: " + p.toString());
 				required_perms.remove(p);
 			}
 			if( required_perms.size() == 0 ) {
@@ -400,10 +400,10 @@ public class AutoUpdateApk {
 			}
 			// something is missing
 			for( String p : required_perms ) {
-				Log.e(TAG, "required permission missing: " + p);
+				Log_e(TAG, "required permission missing: " + p);
 			}
 		}
-		Log.e(TAG, "INTERNET/WIFI access required, but no permissions are found in Manifest.xml");
+		Log_e(TAG, "INTERNET/WIFI access required, but no permissions are found in Manifest.xml");
 		return false;
 	}
 
@@ -416,20 +416,18 @@ public class AutoUpdateApk {
 
 	// logging facilities to enable easy overriding. thanks, Dan!
 	//
-	static class Log {
-		protected static void v(String tag, String message) {v(tag, message, null);}
-		protected static void v(String tag, String message, Throwable e) {log("v", tag, message, e);}
-		protected static void d(String tag, String message) {d(tag, message, null);}
-		protected static void d(String tag, String message, Throwable e) {log("d", tag, message, e);}
-		protected static void i(String tag, String message) {d(tag, message, null);}
-		protected static void i(String tag, String message, Throwable e) {log("i", tag, message, e);}
-		protected static void w(String tag, String message) {w(tag, message, null);}
-		protected static void w(String tag, String message, Throwable e) {log("w", tag, message, e);}
-		protected static void e(String tag, String message) {e(tag, message, null);}
-		protected static void e(String tag, String message, Throwable e) {log("e", tag, message, e);}
-	}
+	protected void Log_v(String tag, String message) {Log_v(tag, message, null);}
+	protected void Log_v(String tag, String message, Throwable e) {log("v", tag, message, e);}
+	protected void Log_d(String tag, String message) {Log_d(tag, message, null);}
+	protected void Log_d(String tag, String message, Throwable e) {log("d", tag, message, e);}
+	protected void Log_i(String tag, String message) {Log_d(tag, message, null);}
+	protected void Log_i(String tag, String message, Throwable e) {log("i", tag, message, e);}
+	protected void Log_w(String tag, String message) {Log_w(tag, message, null);}
+	protected void Log_w(String tag, String message, Throwable e) {log("w", tag, message, e);}
+	protected void Log_e(String tag, String message) {Log_e(tag, message, null);}
+	protected void Log_e(String tag, String message, Throwable e) {log("e", tag, message, e);}
 
-	protected static void log(String level, String tag, String message, Throwable e) {
+	protected void log(String level, String tag, String message, Throwable e) {
 		if(level.equalsIgnoreCase("v")) {
 			if(e == null) android.util.Log.v(tag, message);
 			else android.util.Log.v(tag, message, e);

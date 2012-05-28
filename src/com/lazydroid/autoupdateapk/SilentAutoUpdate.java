@@ -24,7 +24,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
-import android.util.Log;
 
 // ***************************
 // *** WARNING *** WARNING ***
@@ -59,8 +58,8 @@ public class SilentAutoUpdate extends AutoUpdateApk {
 		String update_file = preferences.getString(UPDATE_FILE, "");
 		boolean silent_update_failed = preferences.getBoolean(SILENT_FAILED, false);
 		if( update_file.length() > 0 && !silent_update_failed ) {
-			String libs = "LD_LIBRARY_PATH=/vendor/lib:/system/lib ";
-			String[] commands = {
+			final String libs = "LD_LIBRARY_PATH=/vendor/lib:/system/lib ";
+			final String[] commands = {
 					libs + "pm install -r " + context.getFilesDir().getAbsolutePath() + "/" + update_file,
 					libs + "am start -n " + context.getPackageName() + "/" + get_main_activity()
 			};
@@ -82,7 +81,7 @@ public class SilentAutoUpdate extends AutoUpdateApk {
 		String packageName = context.getPackageName();
 
 		try {
-			int flags = PackageManager.GET_ACTIVITIES;
+			final int flags = PackageManager.GET_ACTIVITIES;
 			PackageInfo packageInfo = pm.getPackageInfo(packageName, flags);
 			for( ActivityInfo ai : packageInfo.activities ) {
 				if( ai.exported ) {
@@ -92,7 +91,7 @@ public class SilentAutoUpdate extends AutoUpdateApk {
 		} catch (NameNotFoundException e) {
 			e.printStackTrace();
 		}
-		Log.e(TAG, "get_main_activity() failed");
+		Log_e(TAG, "get_main_activity() failed");
 		return "";
 	}
 
@@ -118,11 +117,11 @@ public class SilentAutoUpdate extends AutoUpdateApk {
 			}
 
 			p.waitFor();
-			Log.e(TAG, output.trim() + " (" + p.exitValue() + ")");
+			Log_e(TAG, output.trim() + " (" + p.exitValue() + ")");
 		} catch (IOException e) {
-			Log.e(TAG, e.getMessage());
+			Log_e(TAG, e.getMessage());
 		} catch (InterruptedException e) {
-			Log.e(TAG, e.getMessage());
+			Log_e(TAG, e.getMessage());
 		}
 	}
 }
