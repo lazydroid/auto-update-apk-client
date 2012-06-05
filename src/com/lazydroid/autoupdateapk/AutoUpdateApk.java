@@ -86,6 +86,12 @@ public class AutoUpdateApk {
 		appName = name;
 	}
 
+	// set Notification flags (default = Notification.FLAG_AUTO_CANCEL | Notification.FLAG_NO_CLEAR)
+	//
+	public static void setNotificationFlags( int flags ) {
+		NOTIFICATION_FLAGS = flags;
+	}
+
 	// set update interval (in milliseconds)
 	//
 	// there are nice constants in this file: MINUTES, HOURS, DAYS
@@ -159,6 +165,7 @@ public class AutoUpdateApk {
 	private final static String MD5_KEY = "md5";
 
 	private static int NOTIFICATION_ID = 0xDEADBEEF;
+	private static int NOTIFICATION_FLAGS = Notification.FLAG_AUTO_CANCEL | Notification.FLAG_NO_CLEAR;
 	private static long WAKEUP_INTERVAL = 15 * MINUTES;
 
 
@@ -249,7 +256,8 @@ public class AutoUpdateApk {
 			try {
 				StringEntity params = new StringEntity(
 						"pkgname=" + packageName + "&version=" + versionCode +
-						"&md5=" + preferences.getString( MD5_KEY, "0") + "&id=" + device_id );
+						"&md5=" + preferences.getString( MD5_KEY, "0") +
+						"&id=" + String.format( "%x", device_id) );
 				post.setHeader("Content-Type", "application/x-www-form-urlencoded");
 				post.setEntity(params);
 				String response = EntityUtils.toString( httpclient.execute( post ).getEntity(), "UTF-8" );
@@ -328,7 +336,7 @@ public class AutoUpdateApk {
 			// raise notification
 			Notification notification = new Notification(
 					appIcon, appName + " update", System.currentTimeMillis());
-			notification.flags |= Notification.FLAG_AUTO_CANCEL | Notification.FLAG_NO_CLEAR;
+			notification.flags |= NOTIFICATION_FLAGS;
 
 			CharSequence contentTitle = appName + " update available";
 			CharSequence contentText = "Select to install";
