@@ -21,6 +21,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashSet;
 import java.util.Observable;
 import java.util.Set;
@@ -134,6 +136,13 @@ public class AutoUpdateApk extends Observable {
 	public static final String AUTOUPDATE_NO_UPDATE = "autoupdate_no_update";
 	public static final String AUTOUPDATE_GOT_UPDATE = "autoupdate_got_update";
 
+	public void clearSchedule() {
+		schedule.clear();
+	}
+
+	public void addSchedule(int start, int end) {
+		schedule.add(new ScheduleEntry(start,end));
+	}
 //
 // ---------- everything below this line is private and does not belong to the public API ----------
 //
@@ -173,6 +182,17 @@ public class AutoUpdateApk extends Observable {
 	private static int NOTIFICATION_FLAGS = Notification.FLAG_AUTO_CANCEL | Notification.FLAG_NO_CLEAR;
 	private static long WAKEUP_INTERVAL = 15 * MINUTES;
 
+	private class ScheduleEntry {
+		public int start;
+		public int end;
+
+		public ScheduleEntry(int start, int end) {
+			this.start = start;
+			this.end = end;
+		}
+	}
+
+	private static ArrayList<ScheduleEntry> schedule = new ArrayList<ScheduleEntry>();
 
 	private Runnable periodicUpdate = new Runnable() {
 		@Override
@@ -208,6 +228,7 @@ public class AutoUpdateApk extends Observable {
 		device_id = crc32(Secure.getString( context.getContentResolver(), Secure.ANDROID_ID));
 		last_update = preferences.getLong("last_update", 0);
 		NOTIFICATION_ID += crc32(packageName);
+//		schedule.add(new ScheduleEntry(0,24));
 
 		ApplicationInfo appinfo = context.getApplicationInfo();
 		if( appinfo.icon != 0 ) {
@@ -237,6 +258,16 @@ public class AutoUpdateApk extends Observable {
 			context.registerReceiver( connectivity_receiver,
 					new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
 		}
+	}
+
+	private boolean checkSchedule() {
+		if( schedule.size() == 0 ) return true;	// empty schedule always fits
+
+		int now = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+		for( ScheduleEntry e : schedule ) {
+			if( now >= e.start && now < e.end ) return true;
+		}
+		return false;
 	}
 
 	private class checkUpdateTask extends AsyncTask<Void,Void,String[]> {
@@ -329,7 +360,7 @@ public class AutoUpdateApk extends Observable {
 
 	private void checkUpdates(boolean forced) {
 		long now = System.currentTimeMillis();
-		if( forced || (last_update + UPDATE_INTERVAL) < now ) {
+		if( forced || (last_update + UPDATE_INTERVAL) < now && checkSchedule() ) {
 			new checkUpdateTask().execute();
 			last_update = System.currentTimeMillis();
 			preferences.edit().putLong( LAST_UPDATE_KEY, last_update).commit();

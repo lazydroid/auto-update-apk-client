@@ -43,7 +43,7 @@ public class AutoUpdateApkActivity extends Activity implements Observer {
 	//
 	// There are three kinds of update messages sent from AutoUpdateApk (more may be added later):
 	// AUTOUPDATE_CHECKING, AUTOUPDATE_NO_UPDATE and AUTOUPDATE_GOT_UPDATE, which denote the start
-	// of update checking process, and the possible outcome.
+	// of update checking process, and two possible outcomes.
 	//
 	@Override
 	public void update(Observable observable, Object data) {
