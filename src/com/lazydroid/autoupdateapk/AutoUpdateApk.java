@@ -22,6 +22,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.util.HashSet;
+import java.util.Observable;
 import java.util.Set;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
@@ -57,7 +58,7 @@ import android.os.AsyncTask;
 import android.os.Handler;
 import android.provider.Settings.Secure;
 
-public class AutoUpdateApk {
+public class AutoUpdateApk extends Observable {
 
 	// this class is supposed to be instantiated in any of your activities or,
 	// better yet, in Application subclass. Something along the lines of:
@@ -129,6 +130,10 @@ public class AutoUpdateApk {
 		checkUpdates(true);		// force update check
 	}
 
+	public static final String AUTOUPDATE_CHECKING = "autoupdate_checking";
+	public static final String AUTOUPDATE_NO_UPDATE = "autoupdate_no_update";
+	public static final String AUTOUPDATE_GOT_UPDATE = "autoupdate_got_update";
+
 //
 // ---------- everything below this line is private and does not belong to the public API ----------
 //
@@ -147,7 +152,7 @@ public class AutoUpdateApk {
 	private static int versionCode = 0;		// as low as it gets
 	private static String packageName;
 	private static String appName;
-	private static long device_id;
+	private static int device_id;
 
 	public static final long MINUTES = 60 * 1000;
 	public static final long HOURS = 60 * MINUTES;
@@ -274,7 +279,11 @@ public class AutoUpdateApk {
 						fos.close();
 						result[1] = fname;
 					}
+					setChanged();
+					notifyObservers(AUTOUPDATE_GOT_UPDATE);
 				} else {
+					setChanged();
+					notifyObservers(AUTOUPDATE_NO_UPDATE);
 					Log_v(TAG, "no update available");
 				}
 				return result;
@@ -324,6 +333,9 @@ public class AutoUpdateApk {
 			new checkUpdateTask().execute();
 			last_update = System.currentTimeMillis();
 			preferences.edit().putLong( LAST_UPDATE_KEY, last_update).commit();
+
+			this.setChanged();
+			this.notifyObservers(AUTOUPDATE_CHECKING);
 		}
 	}
 
