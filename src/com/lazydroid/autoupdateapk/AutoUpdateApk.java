@@ -73,7 +73,7 @@ public class AutoUpdateApk extends Observable {
 	//
 	//		aua = new AutoUpdateApk(getApplicationContext());	<-- and add this line too
 	//
-	AutoUpdateApk(Context ctx) {
+	public AutoUpdateApk(Context ctx) {
 		setupVariables(ctx);
 	}
 
@@ -135,6 +135,7 @@ public class AutoUpdateApk extends Observable {
 	public static final String AUTOUPDATE_CHECKING = "autoupdate_checking";
 	public static final String AUTOUPDATE_NO_UPDATE = "autoupdate_no_update";
 	public static final String AUTOUPDATE_GOT_UPDATE = "autoupdate_got_update";
+	public static final String AUTOUPDATE_HAVE_UPDATE = "autoupdate_have_update";
 
 	public void clearSchedule() {
 		schedule.clear();
@@ -293,7 +294,7 @@ public class AutoUpdateApk extends Observable {
 				StringEntity params = new StringEntity(
 						"pkgname=" + packageName + "&version=" + versionCode +
 						"&md5=" + preferences.getString( MD5_KEY, "0") +
-						"&id=" + String.format( "%x", device_id) );
+						"&id=" + String.format( "%08x", device_id) );
 				post.setHeader("Content-Type", "application/x-www-form-urlencoded");
 				post.setEntity(params);
 				String response = EntityUtils.toString( httpclient.execute( post ).getEntity(), "UTF-8" );
@@ -376,6 +377,9 @@ public class AutoUpdateApk extends Observable {
 
 		String update_file = preferences.getString(UPDATE_FILE, "");
 		if( update_file.length() > 0 ) {
+			setChanged();
+			notifyObservers(AUTOUPDATE_HAVE_UPDATE);
+
 			// raise notification
 			Notification notification = new Notification(
 					appIcon, appName + " update", System.currentTimeMillis());

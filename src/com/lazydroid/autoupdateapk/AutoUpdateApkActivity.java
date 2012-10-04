@@ -48,7 +48,10 @@ public class AutoUpdateApkActivity extends Activity implements Observer {
 	@Override
 	public void update(Observable observable, Object data) {
 		if( ((String)data).equalsIgnoreCase(AutoUpdateApk.AUTOUPDATE_GOT_UPDATE) ) {
-			android.util.Log.i("AutoUpdateApkActivity", "Got update!");
+			android.util.Log.i("AutoUpdateApkActivity", "Have just received update!");
+		}
+		if( ((String)data).equalsIgnoreCase(AutoUpdateApk.AUTOUPDATE_HAVE_UPDATE) ) {
+			android.util.Log.i("AutoUpdateApkActivity", "There's an update available!");
 		}
 	}
 }
