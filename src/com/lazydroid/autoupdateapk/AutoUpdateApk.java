@@ -179,7 +179,7 @@ public class AutoUpdateApk extends Observable {
 	private final static String MD5_TIME = "md5_time";
 	private final static String MD5_KEY = "md5";
 
-	private static int NOTIFICATION_ID = 0xDEADBEEF;
+	private static int NOTIFICATION_ID = 0xBEEF;
 	private static int NOTIFICATION_FLAGS = Notification.FLAG_AUTO_CANCEL | Notification.FLAG_NO_CLEAR;
 	private static long WAKEUP_INTERVAL = 15 * MINUTES;
 
@@ -375,6 +375,9 @@ public class AutoUpdateApk extends Observable {
 		String ns = Context.NOTIFICATION_SERVICE;
 		NotificationManager nm = (NotificationManager) context.getSystemService(ns);
 
+		//nm.cancel( NOTIFICATION_ID );	// tried this, but it just doesn't do the trick =(
+		nm.cancelAll();
+
 		String update_file = preferences.getString(UPDATE_FILE, "");
 		if( update_file.length() > 0 ) {
 			setChanged();
@@ -395,8 +398,6 @@ public class AutoUpdateApk extends Observable {
 
 			notification.setLatestEventInfo(context, contentTitle, contentText, contentIntent);
 			nm.notify( NOTIFICATION_ID, notification);
-		} else {
-			nm.cancel( NOTIFICATION_ID );
 		}
 	}
 
