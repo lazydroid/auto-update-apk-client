@@ -108,6 +108,7 @@ public class SilentAutoUpdate extends AutoUpdateApk {
 			}
 			os.writeBytes("exit\n");
 			os.flush();
+			os.close();
 
 			int read;
 			byte[] buffer = new byte[4096];

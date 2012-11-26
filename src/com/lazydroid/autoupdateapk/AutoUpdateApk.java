@@ -413,6 +413,7 @@ public class AutoUpdateApk extends Observable {
 			while( (length = bis.read(buf)) != -1 ) {
 				md.update(buf, 0, length);
 			}
+			bis.close();
 
 			byte[] array = md.digest();
 			StringBuffer sb = new StringBuffer();
