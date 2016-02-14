@@ -16,30 +16,28 @@
 package com.lazydroid.autoupdateapk;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.SocketTimeoutException;
+import java.net.URL;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashSet;
 import java.util.Observable;
+import java.util.Scanner;
 import java.util.Set;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
-
-import org.apache.http.HttpEntity;
-import org.apache.http.ParseException;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.params.BasicHttpParams;
-import org.apache.http.params.HttpConnectionParams;
-import org.apache.http.params.HttpParams;
-import org.apache.http.util.EntityUtils;
 
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -57,8 +55,10 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Handler;
 import android.provider.Settings.Secure;
+import android.support.v4.app.NotificationCompat;
 
 public class AutoUpdateApk extends Observable {
 
@@ -87,12 +87,6 @@ public class AutoUpdateApk extends Observable {
 	//
 	public static void setName( String name ) {
 		appName = name;
-	}
-
-	// set Notification flags (default = Notification.FLAG_AUTO_CANCEL | Notification.FLAG_NO_CLEAR)
-	//
-	public static void setNotificationFlags( int flags ) {
-		NOTIFICATION_FLAGS = flags;
 	}
 
 	// set update interval (in milliseconds)
@@ -180,7 +174,6 @@ public class AutoUpdateApk extends Observable {
 	private final static String MD5_KEY = "md5";
 
 	private static int NOTIFICATION_ID = 0xBEEF;
-	private static int NOTIFICATION_FLAGS = Notification.FLAG_AUTO_CANCEL | Notification.FLAG_NO_CLEAR;
 	private static long WAKEUP_INTERVAL = 15 * MINUTES;
 
 	private class ScheduleEntry {
@@ -271,46 +264,94 @@ public class AutoUpdateApk extends Observable {
 		return false;
 	}
 
+	// required in order to prevent issues in earlier Android version.
+	private static void disableConnectionReuseIfNecessary() {
+		// see HttpURLConnection API doc
+		if (Integer.parseInt(Build.VERSION.SDK) < Build.VERSION_CODES.FROYO) {
+			System.setProperty("http.keepAlive", "false");
+		}
+	}
+
+	private static String getResponseText(InputStream inStream) {
+		// very nice trick from http://weblogs.java.net/blog/pat/archive/2004/10/stupid_scanner_1.html
+		return new Scanner(inStream).useDelimiter("\\A").next();
+	}
+
 	private class checkUpdateTask extends AsyncTask<Void,Void,String[]> {
-		private DefaultHttpClient httpclient = new DefaultHttpClient();
-		private HttpPost post = new HttpPost(API_URL);
 
 		protected String[] doInBackground(Void... v) {
 			long start = System.currentTimeMillis();
 
-			HttpParams httpParameters = new BasicHttpParams();
-			// set the timeout in milliseconds until a connection is established
-			// the default value is zero, that means the timeout is not used 
-			int timeoutConnection = 3000;
-			HttpConnectionParams.setConnectionTimeout(httpParameters, timeoutConnection);
-			// set the default socket timeout (SO_TIMEOUT) in milliseconds
-			// which is the timeout for waiting for data
-			int timeoutSocket = 5000;
-			HttpConnectionParams.setSoTimeout(httpParameters, timeoutSocket);
+			disableConnectionReuseIfNecessary();
 
-			httpclient.setParams(httpParameters);
-
+			HttpURLConnection urlConnection = null;
 			try {
-				StringEntity params = new StringEntity(
-						"pkgname=" + packageName + "&version=" + versionCode +
-						"&md5=" + preferences.getString( MD5_KEY, "0") +
-						"&id=" + String.format( "%08x", device_id) );
-				post.setHeader("Content-Type", "application/x-www-form-urlencoded");
-				post.setEntity(params);
-				String response = EntityUtils.toString( httpclient.execute( post ).getEntity(), "UTF-8" );
-				Log_v(TAG, "got a reply from update server");
-				String[] result = response.split("\n");
+				URL url = new URL(API_URL);
+				HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+
+				Uri.Builder builder = new Uri.Builder()
+					.appendQueryParameter("pkgname", packageName)
+					.appendQueryParameter("version", "" + versionCode)
+					.appendQueryParameter("md5", preferences.getString( MD5_KEY, "0"))
+					.appendQueryParameter("id", String.format( "%08x", device_id));
+				final String postParameters = builder.build().getEncodedQuery();
+
+				// set the timeout in milliseconds until a connection is established
+				// the default value is zero, that means the timeout is not used
+				conn.setConnectTimeout(3000);
+				// set the default socket timeout (SO_TIMEOUT) in milliseconds
+				// which is the timeout for waiting for data
+				conn.setReadTimeout(3000);
+				conn.setRequestMethod("POST");
+				conn.setFixedLengthStreamingMode(postParameters.getBytes().length);
+				conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+				conn.setDoInput(true);
+				conn.setDoOutput(true);
+
+				//send the POST out
+				PrintWriter pw = new PrintWriter(conn.getOutputStream());
+				pw.print(postParameters);
+				pw.close();
+
+				conn.connect();
+
+				InputStream in = new BufferedInputStream(conn.getInputStream());
+				final String result[] = getResponseText(in).split("\n");
+				in.close();
+
+				conn.disconnect();
+
 				if( result.length > 1 && result[0].equalsIgnoreCase("have update") ) {
-					HttpGet get = new HttpGet(result[1]);
-					HttpEntity entity = httpclient.execute( get ).getEntity();
-					Log_v(TAG, "got a package from update server");
-					if( entity.getContentType().getValue().equalsIgnoreCase(ANDROID_PACKAGE)) {
+					url = new URL(result[1]);
+					conn = (HttpURLConnection) url.openConnection();
+					// set the timeout in milliseconds until a connection is established
+					// the default value is zero, that means the timeout is not used
+					conn.setConnectTimeout(3000);
+					// set the default socket timeout (SO_TIMEOUT) in milliseconds
+					// which is the timeout for waiting for data
+					conn.setReadTimeout(3000);
+					conn.setDoInput(true);
+					conn.connect();
+
+					if (conn.getResponseCode() == HttpURLConnection.HTTP_OK &&
+						conn.getContentType().equalsIgnoreCase(ANDROID_PACKAGE)) {
+
+						in = new BufferedInputStream(conn.getInputStream());
 						String fname = result[1].substring(result[1].lastIndexOf('/')+1);
-						FileOutputStream fos = context.openFileOutput( fname, Context.MODE_WORLD_READABLE);
-						entity.writeTo(fos);
-						fos.close();
+						FileOutputStream out = context.openFileOutput( fname, Context.MODE_WORLD_READABLE);
+						byte[] buffer = new byte[4096];
+						int n;
+						while ((n = in.read(buffer)) > 0) {
+						    out.write(buffer, 0, n);
+						}
+						in.close();
+						out.close();
 						result[1] = fname;
+					} else {
+						return null;	// bad HTTP response or invalid content type
 					}
+					conn.disconnect();
+
 					setChanged();
 					notifyObservers(AUTOUPDATE_GOT_UPDATE);
 				} else {
@@ -319,17 +360,14 @@ public class AutoUpdateApk extends Observable {
 					Log_v(TAG, "no update available");
 				}
 				return result;
-			} catch (ParseException e) {
-//				e.printStackTrace();
-				Log_e(TAG, e.getMessage());
-			} catch (ClientProtocolException e) {
-//				e.printStackTrace();
-				Log_e(TAG, e.getMessage());
+
+			} catch (MalformedURLException e) {
+				// handle invalid URL
+			} catch (SocketTimeoutException e) {
+				// handle timeout
 			} catch (IOException e) {
-//				e.printStackTrace();
-				Log_e(TAG, e.getMessage());
+				// handle I/0 errors
 			} finally {
-				httpclient.getConnectionManager().shutdown();
 				long elapsed = System.currentTimeMillis() - start;
 				Log_v(TAG, "update check finished in " + elapsed + "ms");
 			}
@@ -375,19 +413,12 @@ public class AutoUpdateApk extends Observable {
 		String ns = Context.NOTIFICATION_SERVICE;
 		NotificationManager nm = (NotificationManager) context.getSystemService(ns);
 
-		//nm.cancel( NOTIFICATION_ID );	// tried this, but it just doesn't do the trick =(
-		nm.cancelAll();
-
 		String update_file = preferences.getString(UPDATE_FILE, "");
 		if( update_file.length() > 0 ) {
 			setChanged();
 			notifyObservers(AUTOUPDATE_HAVE_UPDATE);
 
-			// raise notification
-			Notification notification = new Notification(
-					appIcon, appName + " update", System.currentTimeMillis());
-			notification.flags |= NOTIFICATION_FLAGS;
-
+			// raise the notification
 			CharSequence contentTitle = appName + " update available";
 			CharSequence contentText = "Select to install";
 			Intent notificationIntent = new Intent(Intent.ACTION_VIEW );
@@ -396,8 +427,20 @@ public class AutoUpdateApk extends Observable {
 					ANDROID_PACKAGE);
 			PendingIntent contentIntent = PendingIntent.getActivity(context, 0, notificationIntent, 0);
 
-			notification.setLatestEventInfo(context, contentTitle, contentText, contentIntent);
-			nm.notify( NOTIFICATION_ID, notification);
+			NotificationCompat.Builder builder = new NotificationCompat.Builder(context);
+			builder.setSmallIcon(appIcon);
+			builder.setTicker(appName + " update");
+			builder.setContentTitle(contentTitle);
+			builder.setContentText(contentText);
+			builder.setContentIntent(contentIntent);
+			builder.setWhen(System.currentTimeMillis());
+			builder.setAutoCancel(true);
+			builder.setOngoing(true);
+
+			nm.notify(NOTIFICATION_ID, builder.build());
+		} else {
+			//nm.cancel( NOTIFICATION_ID );	// tried this, but it just doesn't do the trick =(
+			nm.cancelAll();
 		}
 	}
 
