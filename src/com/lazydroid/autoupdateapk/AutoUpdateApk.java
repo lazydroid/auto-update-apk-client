@@ -38,6 +38,8 @@ import java.util.Scanner;
 import java.util.Set;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
+import android.support.v4.content.FileProvider;
+import com.nbeghin.smartchandiser.BuildConfig;
 
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -338,7 +340,12 @@ public class AutoUpdateApk extends Observable {
 
 						in = new BufferedInputStream(conn.getInputStream());
 						String fname = result[1].substring(result[1].lastIndexOf('/')+1);
-						FileOutputStream out = context.openFileOutput( fname, Context.MODE_WORLD_READABLE);
+						FileOutputStream out = null;
+						if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+							out = context.openFileOutput( fname, Context.MODE_PRIVATE);
+						} else {
+							out = context.openFileOutput( fname, Context.MODE_WORLD_READABLE);
+						}
 						byte[] buffer = new byte[4096];
 						int n;
 						while ((n = in.read(buffer)) > 0) {
@@ -421,10 +428,25 @@ public class AutoUpdateApk extends Observable {
 			// raise the notification
 			CharSequence contentTitle = appName + " update available";
 			CharSequence contentText = "Select to install";
-			Intent notificationIntent = new Intent(Intent.ACTION_VIEW );
-			notificationIntent.setDataAndType(
-					Uri.parse("file://" + context.getFilesDir().getAbsolutePath() + "/" + update_file),
-					ANDROID_PACKAGE);
+			File update_apk = new File(context.getFilesDir(), update_file);
+			
+			// nbeghin 19.03.2017 
+			// bugfix for Android 7 (Nougat)
+			// only Android 7's PackageManager can install from FileProvider content://
+			// http://stackoverflow.com/a/39333203/2378095
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+				notificationIntent = new Intent(Intent.ACTION_INSTALL_PACKAGE );
+				notificationIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+				notificationIntent.setDataAndType(
+						FileProvider.getUriForFile(context, BuildConfig.APPLICATION_ID + ".fileprovider", update_apk),
+						ANDROID_PACKAGE);
+			} else {
+				notificationIntent = new Intent(Intent.ACTION_VIEW );
+				notificationIntent.setDataAndType(
+						Uri.parse("file://" + update_apk.getAbsolutePath()),
+						ANDROID_PACKAGE);
+			}
+						
 			PendingIntent contentIntent = PendingIntent.getActivity(context, 0, notificationIntent, 0);
 
 			NotificationCompat.Builder builder = new NotificationCompat.Builder(context);
