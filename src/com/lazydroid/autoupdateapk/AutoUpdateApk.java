@@ -434,6 +434,8 @@ public class AutoUpdateApk extends Observable {
 			// bugfix for Android 7 (Nougat)
 			// only Android 7's PackageManager can install from FileProvider content://
 			// http://stackoverflow.com/a/39333203/2378095
+
+			Intent notificationIntent;
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
 				notificationIntent = new Intent(Intent.ACTION_INSTALL_PACKAGE );
 				notificationIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
